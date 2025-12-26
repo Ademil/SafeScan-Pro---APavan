@@ -11,36 +11,267 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=Roboto+Mono&display=swap" rel="stylesheet">
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f1f5f9;
-            margin: 0;
-            padding: 0;
-            -webkit-tap-highlight-color: transparent;
-        }
-        /* Ajustes para impressão e geração de PDF */
-        .break-inside-avoid {
-            break-inside: avoid;
-            page-break-inside: avoid;
-        }
-        @media print {
-            .no-print { display: none !important; }
-        }
+        body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; -webkit-tap-highlight-color: transparent; }
+        .break-inside-avoid { break-inside: avoid; page-break-inside: avoid; }
+        .loader { border: 3px solid #f3f3f3; border-top: 3px solid #f59e0b; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        #pdf-template { display: none; width: 210mm; background: white; color: #0f172a; position: absolute; left: -9999px; }
+        @media print { .no-print { display: none !important; } #pdf-template { display: block !important; position: static; } }
     </style>
     <script type="importmap">
-    {
-      "imports": {
-        "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
-        "react": "https://esm.sh/react@^19.2.3",
-        "react/": "https://esm.sh/react@^19.2.3/",
-        "react-dom": "https://esm.sh/react-dom@^19.2.3",
-        "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
-      }
-    }
-    </script>
+{
+  "imports": {
+    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
+    "react": "https://esm.sh/react@^19.2.3",
+    "react/": "https://esm.sh/react@^19.2.3/"
+  }
+}
+</script>
 </head>
-<body class="min-h-screen">
-    <!-- O React montará toda a aplicação dentro deste elemento 'root' -->
-    <div id="root"></div>
+<body class="min-h-screen flex flex-col items-center">
+
+    <!-- APP CONTAINER -->
+    <div id="app-root" class="w-full max-w-lg bg-white min-h-screen shadow-2xl flex flex-col relative no-print">
+        
+        <!-- HEADER -->
+        <header class="bg-slate-900 text-white p-4 sticky top-0 z-50 shadow-lg border-b-4 border-amber-500">
+            <div class="flex items-center gap-3">
+                <div class="bg-amber-500 p-2 rounded-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-slate-900" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-xl font-black tracking-tight">SafeScan Pro - APavan</h1>
+                    <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Auditoria de Segurança por IA</p>
+                </div>
+            </div>
+        </header>
+
+        <!-- MAIN -->
+        <main class="flex-grow p-4 space-y-6 pb-32">
+            <div class="space-y-2">
+                <label class="block text-sm font-bold text-slate-700">Atividade Operacional:</label>
+                <select id="job-selector" class="w-full p-3 bg-slate-50 border-2 border-slate-200 rounded-xl font-semibold outline-none focus:border-amber-500">
+                    <option value="Construção Civil">Construção Civil</option>
+                    <option value="Serviços em Eletricidade (NR-10)">Serviços em Eletricidade (NR-10)</option>
+                    <option value="Trabalho em Altura (NR-35)">Trabalho em Altura (NR-35)</option>
+                    <option value="Manipulação Química">Manipulação Química</option>
+                    <option value="Soldagem e Corte">Soldagem e Corte</option>
+                    <option value="Manutenção Geral">Manutenção Geral</option>
+                </select>
+            </div>
+
+            <div id="photo-area" class="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl aspect-video flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-amber-50 transition-all overflow-hidden relative">
+                <div id="photo-placeholder" class="flex flex-col items-center gap-2">
+                    <svg class="w-12 h-12 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" stroke-width="2" /></svg>
+                    <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fotografar Colaborador</span>
+                </div>
+                <img id="image-preview" class="hidden w-full h-full object-cover" src="">
+                <input type="file" id="file-input" accept="image/*" capture="environment" class="hidden">
+            </div>
+
+            <div id="app-result-container" class="hidden space-y-4">
+                <div id="verdict-banner" class="p-4 rounded-xl border-l-4">
+                    <p class="text-xs font-bold uppercase opacity-70">Resultado da Auditoria</p>
+                    <p id="verdict-title" class="text-xl font-black"></p>
+                </div>
+                <div id="mini-checklist" class="bg-white border p-4 rounded-xl space-y-2 shadow-sm"></div>
+            </div>
+
+            <div id="error-message" class="hidden bg-red-100 border border-red-200 text-red-700 p-4 rounded-xl text-xs font-bold"></div>
+        </main>
+
+        <!-- ACTION BAR -->
+        <div class="fixed bottom-0 left-0 right-0 max-w-lg mx-auto p-4 bg-white/90 backdrop-blur border-t z-50">
+            <div class="flex gap-2">
+                <button id="btn-audit" class="flex-grow h-14 bg-amber-500 text-slate-900 rounded-xl font-black uppercase text-sm shadow-lg flex items-center justify-center gap-2">
+                    <span id="btn-text">Auditar Segurança</span>
+                    <div id="loader" class="loader hidden"></div>
+                </button>
+                <button id="btn-export" class="hidden flex-grow h-14 bg-slate-900 text-white rounded-xl font-black uppercase text-sm shadow-lg">Exportar Laudo PDF</button>
+                <button id="btn-reset" class="hidden w-14 h-14 bg-slate-100 rounded-xl flex items-center justify-center border">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" stroke-width="2" /></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PDF HIDDEN TEMPLATE -->
+    <div id="pdf-template">
+        <div class="p-12">
+            <div class="border-b-4 border-slate-900 pb-4 mb-6 flex justify-between items-start">
+                <div>
+                    <h1 class="text-2xl font-black uppercase tracking-tighter">SafeScan Pro - APavan</h1>
+                    <p class="text-xs font-bold text-slate-500 uppercase">Sistema de Auditoria de Segurança do Trabalho - IA</p>
+                </div>
+                <div class="text-right">
+                    <p id="pdf-rid" class="text-[10px] font-bold text-slate-400 uppercase"></p>
+                    <p id="pdf-date" class="text-xs font-bold"></p>
+                </div>
+            </div>
+
+            <div class="space-y-6 text-sm">
+                <div class="break-inside-avoid">
+                    <h2 class="bg-slate-100 p-1 px-2 font-bold border-l-4 border-slate-800 mb-2 uppercase">1. Identificação</h2>
+                    <div class="grid grid-cols-2 gap-4 text-xs border p-3">
+                        <div><p class="text-slate-400 font-bold uppercase text-[9px]">Atividade</p><p id="pdf-ctx" class="font-bold"></p></div>
+                        <div><p class="text-slate-400 font-bold uppercase text-[9px]">Conformidade</p><p id="pdf-score" class="font-black text-lg"></p></div>
+                    </div>
+                </div>
+
+                <div class="break-inside-avoid">
+                    <h2 class="bg-slate-100 p-1 px-2 font-bold border-l-4 border-slate-800 mb-2 uppercase">2. Evidência</h2>
+                    <div class="border p-1"><img id="pdf-img" class="w-full max-h-[90mm] object-contain"></div>
+                </div>
+
+                <div class="break-inside-avoid">
+                    <h2 class="bg-slate-100 p-1 px-2 font-bold border-l-4 border-slate-800 mb-2 uppercase">3. Checklist NR-06</h2>
+                    <table class="w-full text-xs border-collapse border">
+                        <thead><tr class="bg-slate-800 text-white"><th class="p-2 text-left border">Item</th><th class="p-2 border">Status</th><th class="p-2 text-left border">Obs</th></tr></thead>
+                        <tbody id="pdf-table"></tbody>
+                    </table>
+                </div>
+
+                <div class="pt-12 break-inside-avoid">
+                    <div class="flex justify-between gap-12">
+                        <div class="flex-1 border-t-2 border-slate-900 pt-2 text-center">
+                            <p class="text-[10px] font-bold uppercase">Ademilton Pavan</p>
+                            <p class="text-[9px] font-bold text-slate-600">CREA-SC 86959-8</p>
+                            <p class="text-[8px] text-slate-400 italic">Engenheiro de Segurança Responsável</p>
+                        </div>
+                        <div class="flex-1 border-t-2 border-slate-900 pt-2 text-center">
+                            <p class="text-[9px] font-bold uppercase">Assinatura do Colaborador</p>
+                            <p class="text-[8px] text-slate-400 italic">Ciente das orientações de segurança</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { GoogleGenAI, Type } from "@google/genai";
+
+        let currentImg = null;
+
+        const ui = {
+            btnAudit: document.getElementById('btn-audit'),
+            btnText: document.getElementById('btn-text'),
+            loader: document.getElementById('loader'),
+            fileInput: document.getElementById('file-input'),
+            photoArea: document.getElementById('photo-area'),
+            imgPreview: document.getElementById('image-preview'),
+            placeholder: document.getElementById('photo-placeholder'),
+            resultCont: document.getElementById('app-result-container'),
+            verdictTitle: document.getElementById('verdict-title'),
+            verdictBanner: document.getElementById('verdict-banner'),
+            miniList: document.getElementById('mini-checklist'),
+            btnExport: document.getElementById('btn-export'),
+            btnReset: document.getElementById('btn-reset'),
+            error: document.getElementById('error-message')
+        };
+
+        ui.photoArea.onclick = () => ui.fileInput.click();
+        ui.fileInput.onchange = (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    currentImg = reader.result;
+                    ui.imgPreview.src = currentImg;
+                    ui.imgPreview.classList.remove('hidden');
+                    ui.placeholder.classList.add('hidden');
+                };
+                reader.readAsDataURL(file);
+            }
+        };
+
+        ui.btnAudit.onclick = async () => {
+            if (!currentImg) return;
+            ui.btnAudit.disabled = true;
+            ui.loader.classList.remove('hidden');
+            ui.btnText.innerText = "Analisando...";
+            ui.error.classList.add('hidden');
+
+            try {
+                const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+                const job = document.getElementById('job-selector').value;
+                const prompt = `Analise a segurança do trabalho nesta foto para a atividade: ${job}. Use as NRs brasileiras.`;
+
+                const resp = await ai.models.generateContent({
+                    model: "gemini-3-flash-preview",
+                    contents: [{ parts: [
+                        { inlineData: { mimeType: "image/jpeg", data: currentImg.split(',')[1] } },
+                        { text: prompt }
+                    ]}],
+                    config: {
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                            type: Type.OBJECT,
+                            properties: {
+                                workerDetected: { type: Type.BOOLEAN },
+                                jobContext: { type: Type.STRING },
+                                complianceScore: { type: Type.NUMBER },
+                                finalVerdict: { type: Type.STRING },
+                                identifiedPPE: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, status: { type: Type.STRING }, observation: { type: Type.STRING } } } }
+                            }
+                        }
+                    }
+                });
+
+                const data = JSON.parse(resp.text);
+                if (!data.workerDetected) throw new Error("Colaborador não detectado na imagem.");
+                
+                showResults(data);
+            } catch (err) {
+                ui.error.innerText = err.message;
+                ui.error.classList.remove('hidden');
+            } finally {
+                ui.btnAudit.disabled = false;
+                ui.loader.classList.add('hidden');
+                ui.btnText.innerText = "Auditar Segurança";
+            }
+        };
+
+        function showResults(data) {
+            ui.resultCont.classList.remove('hidden');
+            ui.btnAudit.classList.add('hidden');
+            ui.btnExport.classList.remove('hidden');
+            ui.btnReset.classList.remove('hidden');
+
+            const isOk = data.finalVerdict === 'approved';
+            ui.verdictBanner.className = `p-4 rounded-xl border-l-4 ${isOk ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500'}`;
+            ui.verdictTitle.innerText = isOk ? "CONFORME" : "NÃO CONFORME";
+            ui.verdictTitle.className = `text-xl font-black ${isOk ? 'text-green-700' : 'text-red-700'}`;
+
+            ui.miniList.innerHTML = data.identifiedPPE.map(p => `
+                <div class="flex justify-between text-xs border-b pb-1">
+                    <span class="font-bold">${p.name}</span>
+                    <span class="${p.status === 'present' ? 'text-green-600' : 'text-red-600'} font-black">${p.status === 'present' ? '✓' : '✗'}</span>
+                </div>
+            `).join('');
+
+            // Preparar PDF
+            const now = new Date().toLocaleString('pt-BR');
+            const rid = Math.random().toString(36).substring(7).toUpperCase();
+            document.getElementById('pdf-rid').innerText = `LAUDO: ${rid}`;
+            document.getElementById('pdf-date').innerText = now;
+            document.getElementById('pdf-ctx').innerText = data.jobContext;
+            document.getElementById('pdf-score').innerText = `${data.complianceScore}%`;
+            document.getElementById('pdf-img').src = currentImg;
+            document.getElementById('pdf-table').innerHTML = data.identifiedPPE.map(p => `
+                <tr><td class="p-2 border font-bold">${p.name}</td><td class="p-2 border text-center font-bold ${p.status === 'present' ? 'text-green-600' : 'text-red-600'}">${p.status === 'present' ? 'OK' : 'FALTA'}</td><td class="p-2 border italic">${p.observation}</td></tr>
+            `).join('');
+        }
+
+        ui.btnExport.onclick = () => {
+            const el = document.getElementById('pdf-template');
+            el.style.display = 'block';
+            html2pdf().from(el).set({ margin: 0, filename: 'Laudo_SafeScan.pdf', jsPDF: { unit: 'mm', format: 'a4' } }).save().then(() => el.style.display = 'none');
+        };
+
+        ui.btnReset.onclick = () => location.reload();
+    </script>
 </body>
 </html>
